@@ -1,0 +1,70 @@
+#!/bin/env ruby
+# frozen_string_literal: true
+
+require 'yaml'
+require 'fileutils'
+
+$db = %x(notmuch config get database.path).chomp
+
+$inbox = File.join($db, '.inbox')
+FileUtils.mkdir_p($inbox)
+Dir.chdir($inbox)
+
+$sources = YAML.safe_load(File.read(File.join(Dir.home, '.config/notmuch-tools/public-inbox.yml')))
+
+def get_blob(pipe, oid)
+  pipe.write("%s\n" % oid)
+  boid, type, size = pipe.readline(chomp: true).split(' ')
+  return nil if type == 'missing'
+  data = pipe.read(size.to_i)
+  pipe.readline
+  [ boid, data ]
+end
+
+def import(name, revs)
+  dirs = %w[tmp new cur].map { |e| File.join($db, name, e) }
+  FileUtils.mkdir_p(dirs)
+
+  count = %x(git rev-list --count #{revs}).chomp.to_i
+  return unless count.positive?
+
+  puts 'Importing %d commits' % count
+
+  IO.popen(%w[git rev-list] << revs) do |list_pipe|
+    IO.popen(%w[git cat-file --batch], 'w+') do |pipe|
+      loop do
+        oid = list_pipe.readline(chomp: true)
+        boid, data = get_blob(pipe, '%s:m' % oid)
+        File.write("#{$db}/#{name}/new/#{boid}", data)
+      rescue EOFError
+        break
+      end
+    end
+  end
+end
+
+def clone(name, url)
+  puts
+  return unless system(*%w[git clone --mirror], url, ENV['GIT_DIR'])
+  puts
+  import(name, 'master')
+  puts
+end
+
+def fetch(name)
+  head = %x(git rev-parse master).chomp
+  return unless system(*%w[git fetch --quiet])
+  import(name, "#{head}..master")
+end
+
+$sources.each do |name, list|
+  list.each do |epoch, url|
+    puts '= %s/%s' % [name, epoch]
+    ENV['GIT_DIR'] = File.join(name, epoch.to_s)
+    if File.exist?(ENV['GIT_DIR'])
+      fetch(name)
+    else
+      clone(name, url)
+    end
+  end
+end
