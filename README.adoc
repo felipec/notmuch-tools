@@ -1,0 +1,22 @@
+== inbox-update
+
+Fetch https://public-inbox.org/[public-inbox] mailing lists to Maildir format
+for https://notmuchmail.org/[notmuch] consumption.
+
+To configure it you need to create a YAML file in
+`~/.config/notmuch-tools/public-inbox.yml` with a list of URLs for public-inbox
+epochs:
+
+----
+git:
+  1: https://lore.kernel.org/git/1
+  0: https://lore.kernel.org/git/0
+lkml:
+  12: http://lore.kernel.org/lkml/12
+----
+
+Then simply copy the `inbox-update` script to the notmuch `pre-new` hook
+
+    cp inbox-update ~/mail/.notmuch/hooks/pre-new
+
+Then `notmuch new` will fetch the public-inbox mailing lists first.
