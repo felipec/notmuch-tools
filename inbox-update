@@ -35,6 +35,11 @@ def import(name, revs)
       loop do
         oid = list_pipe.readline(chomp: true)
         boid, data = get_blob(pipe, '%s:m' % oid)
+        if !boid
+          boid, = get_blob(pipe, '%s:d' % oid)
+          FileUtils.rm_f("#{$db}/#{name}/new/#{boid}")
+          next
+        end
         File.write("#{$db}/#{name}/new/#{boid}", data)
       rescue EOFError
         break
